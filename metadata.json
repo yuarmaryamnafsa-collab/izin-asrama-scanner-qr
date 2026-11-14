@@ -1,0 +1,6 @@
+{
+  "name": "Izin Asrama - Scanner QR",
+  "description": "Aplikasi pencatatan izin keluar dan masuk asrama siswa berbasis pemindai QR Code yang responsif untuk perangkat Android dan desktop.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Izin Asrama - Scanner QR</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    body { background-color: #f4f6f9; }
+    #reader { width: 100%; border-radius: 10px; overflow: hidden; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-primary mb-3">F
+  <div class="container">
+    <span class="navbar-brand fw-bold">Izin Keluar/Masuk Asrama</span>
+    <button id="btnLogout" class="btn btn-sm btn-outline-light d-none" onclick="logout()">Keluar</button>
+  </div>
+</nav>
+
+<div class="container" style="max-width: 500px;">
+
+  <!-- HALAMAN LOGIN PIN GURU -->
+  <div id="loginSection" class="card shadow-sm">
+    <div class="card-body p-4">
+      <h5 class="card-title mb-3 text-center">Login Petugas / Guru</h5>
+      <div class="mb-3">
+        <label class="form-label">Masukkan PIN Guru</label>
+        <input type="password" id="inputPin" class="form-control form-control-lg text-center" placeholder="******" inputmode="numeric">
+      </div>
+      <button id="btnLogin" class="btn btn-primary w-100 btn-lg" onclick="login()">Masuk</button>
+      <div id="loginError" class="text-danger small mt-2 text-center"></div>
+    </div>
+  </div>
+
+  <!-- HALAMAN UTAMA SCANNER -->
+  <div id="mainSection" class="d-none">
+    <div class="alert alert-info py-2 d-flex justify-content-between align-items-center">
+      <span>Petugas: <strong id="namaPetugas">-</strong></span>
+      <button class="btn btn-sm btn-outline-primary" onclick="loadDiLuar()">Cek Siswa Di Luar</button>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <div id="reader"></div>
+        <div id="scanStatus" class="text-center text-muted small mt-2">Arahkan kamera ke QR Code kartu siswa</div>
+      </div>
+    </div>
+
+    <!-- Daftar Siswa di Luar -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-bold d-flex justify-content-between">
+        <span>Siswa Sedang Di Luar</span>
+        <span id="countDiLuar" class="badge bg-danger">0</span>
+      </div>
+      <ul id="listDiLuar" class="list-group list-group-flush small">
+        <li class="list-group-item text-muted text-center">Klik "Cek Siswa Di Luar" untuk memuat</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL KONFIRMASI IZIN -->
+<div class="modal fade" id="modalIzin" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">Data Siswa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">Nama: <strong id="mNama"></strong></p>
+        <p class="mb-1">Kamar: <strong id="mKamar"></strong></p>
+        <p class="mb-3">Status Saat Ini: <span id="mStatus" class="badge"></span></p>
+
+        <div id="alasanBox" class="mb-3 d-none">
+          <label class="form-label fw-bold">Alasan / Keperluan Keluar</label>
+          <input type="text" id="inputAlasan" class="form-control" placeholder="Contoh: Beli perlengkapan, Sakit, dll">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="button" id="btnSimpan" class="btn btn-primary" onclick="simpanIzin()">Konfirmasi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // GANTI DENGAN URL WEB APP APPS SCRIPT KAMU
+  const API_URL = "https://script.google.com/macros/s/AKfycbyPWLHrL-ZOoyGWVW3fIuKZvlYirXUIdrZ5PXfSTWd_pFR2wziWLY8DUYXo1mE84BMN7g/exec";
+
+  let html5QrCode;
+  let currentSiswa = null;
+  let pinGuru = sessionStorage.getItem("pin_guru") || "";
+  const modalIzin = new bootstrap.Modal(document.getElementById('modalIzin'));
+
+  // Efek suara beep tanpa file mp3 eksternal
+  function playBeep() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  }
+
+  async function callAPI(payload) {
+    payload.pin = pinGuru;
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // Hindari preflight CORS
+      body: JSON.stringify(payload)
+    });
+    return await res.json();
+  }
+
+  async function login() {
+    const btn = document.getElementById("btnLogin");
+    const err = document.getElementById("loginError");
+    pinGuru = document.getElementById("inputPin").value.trim();
+    if (!pinGuru) return;
+
+    btn.disabled = true;
+    btn.innerText = "Memeriksa...";
+    err.innerText = "";
+
+    try {
+      const data = await callAPI({ action: "login" });
+      if (data.status === "success") {
+        sessionStorage.setItem("pin_guru", pinGuru);
+        sessionStorage.setItem("nama_guru", data.nama_guru);
+        tampilkanHalamanUtama(data.nama_guru);
+      } else {
+        err.innerText = data.message;
+      }
+    } catch (e) {
+      err.innerText = "Gagal terhubung ke server.";
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "Masuk";
+    }
+  }
+
+  function logout() {
+    sessionStorage.clear();
+    location.reload();
+  }
+
+  function tampilkanHalamanUtama(namaGuru) {
+    document.getElementById("loginSection").classList.add("d-none");
+    document.getElementById("mainSection").classList.remove("d-none");
+    document.getElementById("btnLogout").classList.remove("d-none");
+    document.getElementById("namaPetugas").innerText = namaGuru;
+    mulaiScanner();
+    loadDiLuar();
+  }
+
+  function mulaiScanner() {
+    html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" }, // Kamera belakang HP
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess
+    ).catch(err => {
+      document.getElementById("scanStatus").innerText = "Gagal mengakses kamera: " + err;
+    });
+  }
+
+  async function onScanSuccess(decodedText) {
+    playBeep();
+    html5QrCode.pause(true); // Jeda kamera saat memproses
+    document.getElementById("scanStatus").innerText = "Memeriksa data QR: " + decodedText + "...";
+
+    try {
+      const res = await callAPI({ action: "cek_siswa", kode_qr: decodedText });
+      if (res.status === "success") {
+        currentSiswa = res.siswa;
+        bukaModal(currentSiswa);
+      } else {
+        alert(res.message);
+        html5QrCode.resume();
+      }
+    } catch (e) {
+      alert("Terjadi kesalahan koneksi.");
+      html5QrCode.resume();
+    }
+    document.getElementById("scanStatus").innerText = "Arahkan kamera ke QR Code kartu siswa";
+  }
+
+  function bukaModal(siswa) {
+    document.getElementById("mNama").innerText = siswa.nama;
+    document.getElementById("mKamar").innerText = siswa.kamar;
+    document.getElementById("inputAlasan").value = "";
+
+    const badge = document.getElementById("mStatus");
+    const alasanBox = document.getElementById("alasanBox");
+    const btnSimpan = document.getElementById("btnSimpan");
+
+    if (siswa.status === "DI_DALAM") {
+      badge.className = "badge bg-success";
+      badge.innerText = "DI DALAM ASRAMA";
+      alasanBox.classList.remove("d-none");
+      btnSimpan.className = "btn btn-warning";
+      btnSimpan.innerText = "Catat KELUAR";
+    } else {
+      badge.className = "badge bg-danger";
+      badge.innerText = "SEDANG DI LUAR";
+      alasanBox.classList.add("d-none");
+      btnSimpan.className = "btn btn-success";
+      btnSimpan.innerText = "Catat MASUK Kembali";
+    }
+    modalIzin.show();
+  }
+
+  async function simpanIzin() {
+    const btn = document.getElementById("btnSimpan");
+    const alasan = document.getElementById("inputAlasan").value.trim();
+
+    if (currentSiswa.status === "DI_DALAM" && !alasan) {
+      alert("Harap isi alasan keluar terlebih dahulu.");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Menyimpan...";
+
+    try {
+      const res = await callAPI({
+        action: "simpan_izin",
+        kode_qr: currentSiswa.kode_qr,
+        alasan: alasan
+      });
+      alert(res.message);
+      modalIzin.hide();
+      loadDiLuar();
+    } catch (e) {
+      alert("Gagal menyimpan data.");
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function loadDiLuar() {
+    const ul = document.getElementById("listDiLuar");
+    ul.innerHTML = '<li class="list-group-item text-center text-muted">Memuat...</li>';
+    try {
+      const res = await callAPI({ action: "get_di_luar" });
+      if (res.status === "success") {
+        document.getElementById("countDiLuar").innerText = res.data.length;
+        if (res.data.length === 0) {
+          ul.innerHTML = '<li class="list-group-item text-center text-muted">Semua siswa ada di dalam asrama</li>';
+        } else {
+          ul.innerHTML = res.data.map(s => 
+            `<li class="list-group-item d-flex justify-content-between">
+              <span><strong>${s.nama}</strong> (${s.kamar})</span>
+              <span class="text-danger">Di Luar</span>
+            </li>`
+          ).join("");
+        }
+      }
+    } catch (e) {
+      ul.innerHTML = '<li class="list-group-item text-danger text-center">Gagal memuat data</li>';
+    }
+  }
+
+  // Lanjutkan kamera ketika modal ditutup
+  document.getElementById('modalIzin').addEventListener('hidden.bs.modal', () => {
+    if (html5QrCode) html5QrCode.resume();
+  });
+
+  // Cek jika sudah login sebelumnya di sesi tab ini
+  if (pinGuru && sessionStorage.getItem("nama_guru")) {
+    tampilkanHalamanUtama(sessionStorage.getItem("nama_guru"));
+  }
+</script>
+</body>
+</html>

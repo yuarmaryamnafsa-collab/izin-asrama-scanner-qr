@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+/* Override default html5-qrcode inline elements for clean responsive fit */
+#qr-reader {
+  width: 100% !important;
+  border: none !important;
+}
+
+#qr-reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 1rem;
+}
+
+#qr-reader img[alt="Info icon"],
+#qr-reader__dashboard_section_csr,
+#qr-reader__header_message {
+  display: none !important;
+}
+
+@keyframes scanBeam {
+  0%, 100% {
+    transform: translateY(0%);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translateY(180px);
+    opacity: 1;
+  }
+}
+
+.scan-beam {
+  animation: scanBeam 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-beam {
+    animation: none;
+  }
+}
