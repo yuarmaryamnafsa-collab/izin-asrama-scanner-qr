@@ -6,7 +6,8 @@ import type {
 } from '../types/asrama';
 
 export const API_URL =
-  'https://script.google.com/macros/s/AKfycbyPWLHrL-ZOoyGWVW3fIuKZvlYirXUIdrZ5PXfSTWd_pFR2wziWLY8DUYXo1mE84BMN7g/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbxegIquF5e2YFWFNVJ3C--HMPRdimuzlh8fpa-7O8W5VvByRPWZQtMS6mkfDWsKRu5U/exec';
+  
 
 export async function callAsramaAPI<T>(
   pin: string,
